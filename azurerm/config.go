@@ -16,7 +16,6 @@ import (
 	"github.com/Azure/azure-sdk-for-go/arm/disk"
 	"github.com/Azure/azure-sdk-for-go/arm/keyvault"
 	"github.com/Azure/azure-sdk-for-go/arm/network"
-	"github.com/Azure/azure-sdk-for-go/arm/operationalinsights"
 	"github.com/Azure/azure-sdk-for-go/arm/postgresql"
 	"github.com/Azure/azure-sdk-for-go/arm/redis"
 	keyVault "github.com/Azure/azure-sdk-for-go/dataplane/keyvault"
@@ -31,6 +30,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/services/eventhub/mgmt/2017-04-01/eventhub"
 	"github.com/Azure/azure-sdk-for-go/services/graphrbac/1.6/graphrbac"
 	"github.com/Azure/azure-sdk-for-go/services/mysql/mgmt/2017-04-30-preview/mysql"
+	"github.com/Azure/azure-sdk-for-go/services/operationalinsights/mgmt/2015-11-01-preview/operationalinsights"
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2016-06-01/subscriptions"
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2016-09-01/locks"
 	"github.com/Azure/azure-sdk-for-go/services/resources/mgmt/2017-05-10/resources"
@@ -423,13 +423,6 @@ func getArmClient(c *authentication.Config) (*ArmClient, error) {
 	lgc.SkipResourceProviderRegistration = c.SkipProviderRegistration
 	client.localNetConnClient = lgc
 
-	opwc := operationalinsights.NewWorkspacesClient(c.SubscriptionID)
-	setUserAgent(&opwc.Client)
-	opwc.Authorizer = auth
-	opwc.Sender = autorest.CreateSender(withRequestLogging())
-	opwc.SkipResourceProviderRegistration = c.SkipProviderRegistration
-	client.workspacesClient = opwc
-
 	pipc := network.NewPublicIPAddressesClientWithBaseURI(endpoint, c.SubscriptionID)
 	setUserAgent(&pipc.Client)
 	pipc.Authorizer = auth
@@ -513,6 +506,7 @@ func getArmClient(c *authentication.Config) (*ArmClient, error) {
 	client.registerEventHubClients(endpoint, c.SubscriptionID, auth, sender)
 	client.registerKeyVaultClients(endpoint, c.SubscriptionID, auth, keyVaultAuth, sender)
 	client.registerNetworkingClients(endpoint, c.SubscriptionID, auth, sender)
+	client.registerOperationalInsightsClients(endpoint, c.SubscriptionID, auth, sender)
 	client.registerRedisClients(endpoint, c.SubscriptionID, auth, sender)
 	client.registerResourcesClients(endpoint, c.SubscriptionID, auth)
 	client.registerSearchClients(endpoint, c.SubscriptionID, auth)
@@ -785,6 +779,12 @@ func (c *ArmClient) registerNetworkingClients(endpoint, subscriptionId string, a
 	watchersClient.Sender = sender
 	watchersClient.SkipResourceProviderRegistration = c.skipProviderRegistration
 	c.watcherClient = watchersClient
+}
+
+func (c *ArmClient) registerOperationalInsightsClients(endpoint, subscriptionId string, auth autorest.Authorizer, sender autorest.Sender) {
+	opwc := operationalinsights.NewWorkspacesClient(subscriptionId)
+	c.configureClient(&opwc.Client, auth)
+	c.workspacesClient = opwc
 }
 
 func (c *ArmClient) registerRedisClients(endpoint, subscriptionId string, auth autorest.Authorizer, sender autorest.Sender) {
