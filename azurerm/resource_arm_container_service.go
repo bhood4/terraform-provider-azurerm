@@ -62,6 +62,25 @@ func resourceArmContainerService() *schema.Resource {
 							Type:     schema.TypeString,
 							Computed: true,
 						},
+
+						"vm_size": {
+							Type:     schema.TypeString,
+							Required: true,
+						},
+
+						"vnet_subnet_id": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+							ForceNew: true,
+						},
+
+						"first_consecutive_static_ip": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+							ForceNew: true,
+						},
 					},
 				},
 				Set: resourceAzureRMContainerServiceMasterProfileHash,
@@ -95,10 +114,29 @@ func resourceArmContainerService() *schema.Resource {
 				Set: resourceAzureRMContainerServiceLinuxProfilesHash,
 			},
 
+			"windows_profile": {
+				Type:     schema.TypeSet,
+				Optional: true,
+				MaxItems: 1,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"admin_username": {
+							Type:     schema.TypeString,
+							Required: true,
+						},
+						"admin_password": {
+							Type:     schema.TypeString,
+							Required: true,
+						},
+					},
+				},
+				Set: resourceAzureRMContainerServiceWindowsProfilesHash,
+			},
+
 			"agent_pool_profile": {
 				Type:     schema.TypeSet,
 				Required: true,
-				MaxItems: 1,
+				MaxItems: 2,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
 						"name": {
@@ -128,6 +166,19 @@ func resourceArmContainerService() *schema.Resource {
 						"vm_size": {
 							Type:     schema.TypeString,
 							Required: true,
+						},
+
+						"os_type": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Default:  "Linux",
+						},
+
+						"vnet_subnet_id": {
+							Type:     schema.TypeString,
+							Optional: true,
+							Computed: true,
+							ForceNew: true,
 						},
 					},
 				},
@@ -214,6 +265,11 @@ func resourceArmContainerServiceCreate(d *schema.ResourceData, meta interface{})
 		Tags: expandTags(tags),
 	}
 
+	windowsProfile := expandAzureRmContainerServiceWindowsProfile(d)
+	if windowsProfile != nil {
+		parameters.WindowsProfile = windowsProfile
+	}
+
 	servicePrincipalProfile := expandAzureRmContainerServiceServicePrincipal(d)
 	if servicePrincipalProfile != nil {
 		parameters.ServicePrincipalProfile = servicePrincipalProfile
@@ -282,7 +338,14 @@ func resourceArmContainerServiceRead(d *schema.ResourceData, meta interface{}) e
 	d.Set("master_profile", &masterProfiles)
 
 	linuxProfile := flattenAzureRmContainerServiceLinuxProfile(*resp.Properties.LinuxProfile)
-	d.Set("linux_profile", &linuxProfile)
+	if linuxProfile != nil {
+		d.Set("linux_profile", &linuxProfile)
+	}
+
+	windowsProfile := flattenAzureRmContainerServiceWindowsProfile(resp.Properties.WindowsProfile)
+	if windowsProfile != nil {
+		d.Set("windows_profile", windowsProfile)
+	}
 
 	agentPoolProfiles := flattenAzureRmContainerServiceAgentPoolProfiles(resp.Properties.AgentPoolProfiles)
 	d.Set("agent_pool_profile", &agentPoolProfiles)
@@ -337,6 +400,13 @@ func flattenAzureRmContainerServiceMasterProfile(profile containerservice.Master
 	masterProfile["count"] = int(*profile.Count)
 	masterProfile["dns_prefix"] = *profile.DNSPrefix
 	masterProfile["fqdn"] = *profile.Fqdn
+	masterProfile["vm_size"] = string(profile.VMSize)
+	if profile.VnetSubnetID != nil {
+		masterProfile["vnet_subnet_id"] = *profile.VnetSubnetID
+	}
+	if profile.FirstConsecutiveStaticIP != nil {
+		masterProfile["first_consecutive_static_ip"] = *profile.FirstConsecutiveStaticIP
+	}
 
 	masterProfiles.Add(masterProfile)
 
@@ -366,6 +436,26 @@ func flattenAzureRmContainerServiceLinuxProfile(profile containerservice.LinuxPr
 	return profiles
 }
 
+func flattenAzureRmContainerServiceWindowsProfile(profile *containerservice.WindowsProfile) *schema.Set {
+	if profile == nil {
+		return nil
+	}
+	profiles := &schema.Set{
+		F: resourceAzureRMContainerServiceWindowsProfilesHash,
+	}
+
+	values := map[string]interface{}{}
+
+	values["admin_username"] = *profile.AdminUsername
+	values["admin_password"] = "Thisisackage1234!"
+	if profile.AdminPassword != nil {
+		values["admin_password"] = *profile.AdminPassword
+	}
+	profiles.Add(values)
+
+	return profiles
+}
+
 func flattenAzureRmContainerServiceAgentPoolProfiles(profiles *[]containerservice.AgentPoolProfile) *schema.Set {
 	agentPoolProfiles := &schema.Set{
 		F: resourceAzureRMContainerServiceAgentPoolProfilesHash,
@@ -378,6 +468,10 @@ func flattenAzureRmContainerServiceAgentPoolProfiles(profiles *[]containerservic
 		agentPoolProfile["fqdn"] = *profile.Fqdn
 		agentPoolProfile["name"] = *profile.Name
 		agentPoolProfile["vm_size"] = string(profile.VMSize)
+		agentPoolProfile["os_type"] = string(profile.OsType)
+		if profile.VnetSubnetID != nil {
+			agentPoolProfile["vnet_subnet_id"] = *profile.VnetSubnetID
+		}
 		agentPoolProfiles.Add(agentPoolProfile)
 	}
 
@@ -407,13 +501,20 @@ func flattenAzureRmContainerServiceServicePrincipalProfile(profile *containerser
 }
 
 func flattenAzureRmContainerServiceDiagnosticsProfile(profile *containerservice.DiagnosticsProfile) *schema.Set {
+
+	if profile == nil || profile.VMDiagnostics == nil {
+		return nil
+	}
+
 	diagnosticProfiles := &schema.Set{
 		F: resourceAzureRMContainerServiceDiagnosticProfilesHash,
 	}
 
 	values := map[string]interface{}{}
 
-	values["enabled"] = *profile.VMDiagnostics.Enabled
+	if profile.VMDiagnostics.Enabled != nil {
+		values["enabled"] = *profile.VMDiagnostics.Enabled
+	}
 	if profile.VMDiagnostics.StorageURI != nil {
 		values["storage_uri"] = *profile.VMDiagnostics.StorageURI
 	}
@@ -467,16 +568,44 @@ func expandAzureRmContainerServiceLinuxProfile(d *schema.ResourceData) container
 	return profile
 }
 
+func expandAzureRmContainerServiceWindowsProfile(d *schema.ResourceData) *containerservice.WindowsProfile {
+	value, exists := d.GetOk("windows_profile")
+	if !exists {
+		return nil
+	}
+
+	profiles := value.(*schema.Set).List()
+
+	config := profiles[0].(map[string]interface{})
+
+	adminUsername := config["admin_username"].(string)
+	adminPassword := config["admin_password"].(string)
+
+	profile := containerservice.WindowsProfile{
+		AdminUsername: &adminUsername,
+		AdminPassword: &adminPassword,
+	}
+	return &profile
+}
+
 func expandAzureRmContainerServiceMasterProfile(d *schema.ResourceData) containerservice.MasterProfile {
 	configs := d.Get("master_profile").(*schema.Set).List()
 	config := configs[0].(map[string]interface{})
 
 	count := int32(config["count"].(int))
 	dnsPrefix := config["dns_prefix"].(string)
+	fqdn := config["fqdn"].(string)
+	vmSize := config["vm_size"].(string)
+	vnetSubnetId := config["vnet_subnet_id"].(string)
+	firstConsecutiveStaticIP := config["first_consecutive_static_ip"].(string)
 
 	profile := containerservice.MasterProfile{
-		Count:     &count,
-		DNSPrefix: &dnsPrefix,
+		Count:                    &count,
+		DNSPrefix:                &dnsPrefix,
+		Fqdn:                     &fqdn,
+		VMSize:                   containerservice.VMSizeTypes(vmSize),
+		VnetSubnetID:             &vnetSubnetId,
+		FirstConsecutiveStaticIP: &firstConsecutiveStaticIP,
 	}
 
 	return profile
@@ -513,12 +642,16 @@ func expandAzureRmContainerServiceAgentProfiles(d *schema.ResourceData) []contai
 	count := int32(config["count"].(int))
 	dnsPrefix := config["dns_prefix"].(string)
 	vmSize := config["vm_size"].(string)
+	osType := config["os_type"].(string)
+	vnetSubnetId := config["vnet_subnet_id"].(string)
 
 	profile := containerservice.AgentPoolProfile{
-		Name:      &name,
-		Count:     &count,
-		VMSize:    containerservice.VMSizeTypes(vmSize),
-		DNSPrefix: &dnsPrefix,
+		Name:         &name,
+		Count:        &count,
+		VMSize:       containerservice.VMSizeTypes(vmSize),
+		DNSPrefix:    &dnsPrefix,
+		OsType:       containerservice.OSType(osType),
+		VnetSubnetID: &vnetSubnetId,
 	}
 
 	profiles = append(profiles, profile)
@@ -544,9 +677,23 @@ func resourceAzureRMContainerServiceMasterProfileHash(v interface{}) int {
 
 	count := m["count"].(int)
 	dnsPrefix := m["dns_prefix"].(string)
+	fqdn := m["fqdn"].(string)
+	vmSize := m["vm_size"].(string)
 
 	buf.WriteString(fmt.Sprintf("%d-", count))
 	buf.WriteString(fmt.Sprintf("%s-", dnsPrefix))
+	buf.WriteString(fmt.Sprintf("%s-", fqdn))
+	buf.WriteString(fmt.Sprintf("%s-", vmSize))
+
+	if m["vnet_subnet_id"] != nil {
+		vnetSubnetId := m["vnet_subnet_id"].(string)
+		buf.WriteString(fmt.Sprintf("%s-", vnetSubnetId))
+	}
+
+	if m["first_consecutive_static_ip"] != nil {
+		firstConsecutiveStaticIP := m["first_consecutive_static_ip"].(string)
+		buf.WriteString(fmt.Sprintf("%s-", firstConsecutiveStaticIP))
+	}
 
 	return hashcode.String(buf.String())
 }
@@ -558,6 +705,19 @@ func resourceAzureRMContainerServiceLinuxProfilesHash(v interface{}) int {
 	adminUsername := m["admin_username"].(string)
 
 	buf.WriteString(fmt.Sprintf("%s-", adminUsername))
+
+	return hashcode.String(buf.String())
+}
+
+func resourceAzureRMContainerServiceWindowsProfilesHash(v interface{}) int {
+	var buf bytes.Buffer
+	m := v.(map[string]interface{})
+
+	adminUsername := m["admin_username"].(string)
+	adminPassword := m["admin_password"].(string)
+
+	buf.WriteString(fmt.Sprintf("%s-", adminUsername))
+	buf.WriteString(fmt.Sprintf("%s-", adminPassword))
 
 	return hashcode.String(buf.String())
 }
@@ -581,11 +741,18 @@ func resourceAzureRMContainerServiceAgentPoolProfilesHash(v interface{}) int {
 	dnsPrefix := m["dns_prefix"].(string)
 	name := m["name"].(string)
 	vm_size := m["vm_size"].(string)
+	os_type := m["os_type"].(string)
 
 	buf.WriteString(fmt.Sprintf("%d-", count))
 	buf.WriteString(fmt.Sprintf("%s-", dnsPrefix))
 	buf.WriteString(fmt.Sprintf("%s-", name))
 	buf.WriteString(fmt.Sprintf("%s-", vm_size))
+	buf.WriteString(fmt.Sprintf("%s-", os_type))
+
+	if m["vnet_subnet_id"] != nil {
+		vnet_subnet_id := m["vnet_subnet_id"].(string)
+		buf.WriteString(fmt.Sprintf("%s-", vnet_subnet_id))
+	}
 
 	return hashcode.String(buf.String())
 }
