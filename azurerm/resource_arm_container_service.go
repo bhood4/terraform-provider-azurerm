@@ -677,23 +677,11 @@ func resourceAzureRMContainerServiceMasterProfileHash(v interface{}) int {
 
 	count := m["count"].(int)
 	dnsPrefix := m["dns_prefix"].(string)
-	fqdn := m["fqdn"].(string)
 	vmSize := m["vm_size"].(string)
 
 	buf.WriteString(fmt.Sprintf("%d-", count))
 	buf.WriteString(fmt.Sprintf("%s-", dnsPrefix))
-	buf.WriteString(fmt.Sprintf("%s-", fqdn))
 	buf.WriteString(fmt.Sprintf("%s-", vmSize))
-
-	if m["vnet_subnet_id"] != nil {
-		vnetSubnetId := m["vnet_subnet_id"].(string)
-		buf.WriteString(fmt.Sprintf("%s-", vnetSubnetId))
-	}
-
-	if m["first_consecutive_static_ip"] != nil {
-		firstConsecutiveStaticIP := m["first_consecutive_static_ip"].(string)
-		buf.WriteString(fmt.Sprintf("%s-", firstConsecutiveStaticIP))
-	}
 
 	return hashcode.String(buf.String())
 }
@@ -714,10 +702,8 @@ func resourceAzureRMContainerServiceWindowsProfilesHash(v interface{}) int {
 	m := v.(map[string]interface{})
 
 	adminUsername := m["admin_username"].(string)
-	adminPassword := m["admin_password"].(string)
 
 	buf.WriteString(fmt.Sprintf("%s-", adminUsername))
-	buf.WriteString(fmt.Sprintf("%s-", adminPassword))
 
 	return hashcode.String(buf.String())
 }
@@ -738,21 +724,16 @@ func resourceAzureRMContainerServiceAgentPoolProfilesHash(v interface{}) int {
 	m := v.(map[string]interface{})
 
 	count := m["count"].(int)
-	dnsPrefix := m["dns_prefix"].(string)
+	//dnsPrefix := m["dns_prefix"].(string)
 	name := m["name"].(string)
 	vm_size := m["vm_size"].(string)
 	os_type := m["os_type"].(string)
 
 	buf.WriteString(fmt.Sprintf("%d-", count))
-	buf.WriteString(fmt.Sprintf("%s-", dnsPrefix))
+	//buf.WriteString(fmt.Sprintf("%s-", dnsPrefix))
 	buf.WriteString(fmt.Sprintf("%s-", name))
 	buf.WriteString(fmt.Sprintf("%s-", vm_size))
 	buf.WriteString(fmt.Sprintf("%s-", os_type))
-
-	if m["vnet_subnet_id"] != nil {
-		vnet_subnet_id := m["vnet_subnet_id"].(string)
-		buf.WriteString(fmt.Sprintf("%s-", vnet_subnet_id))
-	}
 
 	return hashcode.String(buf.String())
 }

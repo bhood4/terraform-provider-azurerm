@@ -66,7 +66,7 @@ func (client ContainerServicesClient) CreateOrUpdate(ctx context.Context, resour
 						Chain: []validation.Constraint{{Target: "parameters.Properties.WindowsProfile.AdminUsername", Name: validation.Null, Rule: true,
 							Chain: []validation.Constraint{{Target: "parameters.Properties.WindowsProfile.AdminUsername", Name: validation.Pattern, Rule: `^[a-zA-Z0-9]+([._]?[a-zA-Z0-9]+)*$`, Chain: nil}}},
 							{Target: "parameters.Properties.WindowsProfile.AdminPassword", Name: validation.Null, Rule: true,
-								Chain: []validation.Constraint{{Target: "parameters.Properties.WindowsProfile.AdminPassword", Name: validation.Pattern, Rule: `^(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%\^&\*\(\)])[a-zA-Z\d!@#$%\^&\*\(\)]{12,123}$`, Chain: nil}}},
+								Chain: []validation.Constraint{{Target: "parameters.Properties.WindowsProfile.AdminPassword", Name: validation.Pattern, Rule: `^(.*)$`, Chain: nil}}},
 						}},
 					{Target: "parameters.Properties.LinuxProfile", Name: validation.Null, Rule: true,
 						Chain: []validation.Constraint{{Target: "parameters.Properties.LinuxProfile.AdminUsername", Name: validation.Null, Rule: true,
