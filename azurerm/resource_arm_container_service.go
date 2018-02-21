@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"runtime"
 	"time"
 
 	"bytes"
@@ -334,7 +335,9 @@ func resourceArmContainerServiceRead(d *schema.ResourceData, meta interface{}) e
 
 	d.Set("orchestration_platform", string(resp.Properties.OrchestratorProfile.OrchestratorType))
 
+	log.Printf("[TRACE] In Container Server read - pre flatten service master profile")
 	masterProfiles := flattenAzureRmContainerServiceMasterProfile(*resp.Properties.MasterProfile)
+	log.Printf("[TRACE] In Container Service read - post flatten service master profile")
 	d.Set("master_profile", &masterProfiles)
 
 	linuxProfile := flattenAzureRmContainerServiceLinuxProfile(*resp.Properties.LinuxProfile)
@@ -677,11 +680,33 @@ func resourceAzureRMContainerServiceMasterProfileHash(v interface{}) int {
 
 	count := m["count"].(int)
 	dnsPrefix := m["dns_prefix"].(string)
+	//fqdn := m["fqdn"].(string)
 	vmSize := m["vm_size"].(string)
 
 	buf.WriteString(fmt.Sprintf("%d-", count))
 	buf.WriteString(fmt.Sprintf("%s-", dnsPrefix))
+	//buf.WriteString(fmt.Sprintf("%s-", fqdn))
 	buf.WriteString(fmt.Sprintf("%s-", vmSize))
+
+	//fields := "count-dnsPrefix-fqdn-vmSize-"
+	fields := "count-dnsPrefix-vmSize-"
+
+	//	if m["vnet_subnet_id"] != nil {
+	//		vnetSubnetId := m["vnet_subnet_id"].(string)
+	//		buf.WriteString(fmt.Sprintf("%s-", vnetSubnetId))
+	//		fields += "vnet_subnet_id-"
+	//	}
+
+	//if m["first_consecutive_static_ip"] != nil {
+	//	firstConsecutiveStaticIP := m["first_consecutive_static_ip"].(string)
+	//	buf.WriteString(fmt.Sprintf("%s-", firstConsecutiveStaticIP))
+	//	fields += "first_sonsecutive_static_ip-"
+	//}
+
+	bs := make([]byte, 200000)
+	n := runtime.Stack(bs, true)
+
+	log.Printf("[DEBUG] Service Master Profile Hash (%s) (%s) = (%d) at (%s)", fields, buf.String(), hashcode.String(buf.String()), string(bs[:n]))
 
 	return hashcode.String(buf.String())
 }
@@ -702,8 +727,10 @@ func resourceAzureRMContainerServiceWindowsProfilesHash(v interface{}) int {
 	m := v.(map[string]interface{})
 
 	adminUsername := m["admin_username"].(string)
+	//adminPassword := m["admin_password"].(string)
 
 	buf.WriteString(fmt.Sprintf("%s-", adminUsername))
+	//buf.WriteString(fmt.Sprintf("%s-", adminPassword))
 
 	return hashcode.String(buf.String())
 }
@@ -734,6 +761,11 @@ func resourceAzureRMContainerServiceAgentPoolProfilesHash(v interface{}) int {
 	buf.WriteString(fmt.Sprintf("%s-", name))
 	buf.WriteString(fmt.Sprintf("%s-", vm_size))
 	buf.WriteString(fmt.Sprintf("%s-", os_type))
+
+	//if m["vnet_subnet_id"] != nil {
+	//	vnet_subnet_id := m["vnet_subnet_id"].(string)
+	//	buf.WriteString(fmt.Sprintf("%s-", vnet_subnet_id))
+	//}
 
 	return hashcode.String(buf.String())
 }
