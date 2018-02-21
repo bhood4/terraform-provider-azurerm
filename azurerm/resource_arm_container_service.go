@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 
-	"runtime"
 	"time"
 
 	"bytes"
@@ -72,14 +71,12 @@ func resourceArmContainerService() *schema.Resource {
 						"vnet_subnet_id": {
 							Type:     schema.TypeString,
 							Optional: true,
-							Computed: true,
 							ForceNew: true,
 						},
 
 						"first_consecutive_static_ip": {
 							Type:     schema.TypeString,
 							Optional: true,
-							Computed: true,
 							ForceNew: true,
 						},
 					},
@@ -178,7 +175,6 @@ func resourceArmContainerService() *schema.Resource {
 						"vnet_subnet_id": {
 							Type:     schema.TypeString,
 							Optional: true,
-							Computed: true,
 							ForceNew: true,
 						},
 					},
@@ -335,9 +331,7 @@ func resourceArmContainerServiceRead(d *schema.ResourceData, meta interface{}) e
 
 	d.Set("orchestration_platform", string(resp.Properties.OrchestratorProfile.OrchestratorType))
 
-	log.Printf("[TRACE] In Container Server read - pre flatten service master profile")
 	masterProfiles := flattenAzureRmContainerServiceMasterProfile(*resp.Properties.MasterProfile)
-	log.Printf("[TRACE] In Container Service read - post flatten service master profile")
 	d.Set("master_profile", &masterProfiles)
 
 	linuxProfile := flattenAzureRmContainerServiceLinuxProfile(*resp.Properties.LinuxProfile)
@@ -602,16 +596,28 @@ func expandAzureRmContainerServiceMasterProfile(d *schema.ResourceData) containe
 	vnetSubnetId := config["vnet_subnet_id"].(string)
 	firstConsecutiveStaticIP := config["first_consecutive_static_ip"].(string)
 
-	profile := containerservice.MasterProfile{
-		Count:                    &count,
-		DNSPrefix:                &dnsPrefix,
-		Fqdn:                     &fqdn,
-		VMSize:                   containerservice.VMSizeTypes(vmSize),
-		VnetSubnetID:             &vnetSubnetId,
-		FirstConsecutiveStaticIP: &firstConsecutiveStaticIP,
-	}
+	if (vnetSubnetId == "") && (firstConsecutiveStaticIP == "") {
+		// call the pre RP2 variant
+		profile := containerservice.MasterProfile{
+			Count:     &count,
+			DNSPrefix: &dnsPrefix,
+			Fqdn:      &fqdn,
+			VMSize:    containerservice.VMSizeTypes(vmSize),
+		}
 
-	return profile
+		return profile
+	} else {
+		profile := containerservice.MasterProfile{
+			Count:                    &count,
+			DNSPrefix:                &dnsPrefix,
+			Fqdn:                     &fqdn,
+			VMSize:                   containerservice.VMSizeTypes(vmSize),
+			VnetSubnetID:             &vnetSubnetId,
+			FirstConsecutiveStaticIP: &firstConsecutiveStaticIP,
+		}
+
+		return profile
+	}
 }
 
 func expandAzureRmContainerServiceServicePrincipal(d *schema.ResourceData) *containerservice.ServicePrincipalProfile {
@@ -648,16 +654,30 @@ func expandAzureRmContainerServiceAgentProfiles(d *schema.ResourceData) []contai
 	osType := config["os_type"].(string)
 	vnetSubnetId := config["vnet_subnet_id"].(string)
 
-	profile := containerservice.AgentPoolProfile{
-		Name:         &name,
-		Count:        &count,
-		VMSize:       containerservice.VMSizeTypes(vmSize),
-		DNSPrefix:    &dnsPrefix,
-		OsType:       containerservice.OSType(osType),
-		VnetSubnetID: &vnetSubnetId,
-	}
+	if vnetSubnetId == "" {
+		// call the pre RP2 variant
+		profile := containerservice.AgentPoolProfile{
+			Name:      &name,
+			Count:     &count,
+			VMSize:    containerservice.VMSizeTypes(vmSize),
+			DNSPrefix: &dnsPrefix,
+			OsType:    containerservice.OSType(osType),
+		}
 
-	profiles = append(profiles, profile)
+		profiles = append(profiles, profile)
+	} else {
+
+		profile := containerservice.AgentPoolProfile{
+			Name:         &name,
+			Count:        &count,
+			VMSize:       containerservice.VMSizeTypes(vmSize),
+			DNSPrefix:    &dnsPrefix,
+			OsType:       containerservice.OSType(osType),
+			VnetSubnetID: &vnetSubnetId,
+		}
+
+		profiles = append(profiles, profile)
+	}
 
 	return profiles
 }
@@ -680,33 +700,11 @@ func resourceAzureRMContainerServiceMasterProfileHash(v interface{}) int {
 
 	count := m["count"].(int)
 	dnsPrefix := m["dns_prefix"].(string)
-	//fqdn := m["fqdn"].(string)
 	vmSize := m["vm_size"].(string)
 
 	buf.WriteString(fmt.Sprintf("%d-", count))
 	buf.WriteString(fmt.Sprintf("%s-", dnsPrefix))
-	//buf.WriteString(fmt.Sprintf("%s-", fqdn))
 	buf.WriteString(fmt.Sprintf("%s-", vmSize))
-
-	//fields := "count-dnsPrefix-fqdn-vmSize-"
-	fields := "count-dnsPrefix-vmSize-"
-
-	//	if m["vnet_subnet_id"] != nil {
-	//		vnetSubnetId := m["vnet_subnet_id"].(string)
-	//		buf.WriteString(fmt.Sprintf("%s-", vnetSubnetId))
-	//		fields += "vnet_subnet_id-"
-	//	}
-
-	//if m["first_consecutive_static_ip"] != nil {
-	//	firstConsecutiveStaticIP := m["first_consecutive_static_ip"].(string)
-	//	buf.WriteString(fmt.Sprintf("%s-", firstConsecutiveStaticIP))
-	//	fields += "first_sonsecutive_static_ip-"
-	//}
-
-	bs := make([]byte, 200000)
-	n := runtime.Stack(bs, true)
-
-	log.Printf("[DEBUG] Service Master Profile Hash (%s) (%s) = (%d) at (%s)", fields, buf.String(), hashcode.String(buf.String()), string(bs[:n]))
 
 	return hashcode.String(buf.String())
 }
@@ -727,10 +725,8 @@ func resourceAzureRMContainerServiceWindowsProfilesHash(v interface{}) int {
 	m := v.(map[string]interface{})
 
 	adminUsername := m["admin_username"].(string)
-	//adminPassword := m["admin_password"].(string)
 
 	buf.WriteString(fmt.Sprintf("%s-", adminUsername))
-	//buf.WriteString(fmt.Sprintf("%s-", adminPassword))
 
 	return hashcode.String(buf.String())
 }
@@ -751,21 +747,14 @@ func resourceAzureRMContainerServiceAgentPoolProfilesHash(v interface{}) int {
 	m := v.(map[string]interface{})
 
 	count := m["count"].(int)
-	//dnsPrefix := m["dns_prefix"].(string)
 	name := m["name"].(string)
 	vm_size := m["vm_size"].(string)
 	os_type := m["os_type"].(string)
 
 	buf.WriteString(fmt.Sprintf("%d-", count))
-	//buf.WriteString(fmt.Sprintf("%s-", dnsPrefix))
 	buf.WriteString(fmt.Sprintf("%s-", name))
 	buf.WriteString(fmt.Sprintf("%s-", vm_size))
 	buf.WriteString(fmt.Sprintf("%s-", os_type))
-
-	//if m["vnet_subnet_id"] != nil {
-	//	vnet_subnet_id := m["vnet_subnet_id"].(string)
-	//	buf.WriteString(fmt.Sprintf("%s-", vnet_subnet_id))
-	//}
 
 	return hashcode.String(buf.String())
 }
